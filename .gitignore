@@ -1,3 +1,5 @@
-/waif
-/venv
-/assets
+/miscellaneous/waif
+/miscellaneous/runs
+/miscellaneous/assets
+/backend/venv
+/frontend/node_modules
