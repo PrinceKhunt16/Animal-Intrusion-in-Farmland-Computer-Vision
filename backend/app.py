@@ -1,80 +1,111 @@
-import os, tempfile
-import cv2 as cv
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from flask_pymongo import PyMongo
+from werkzeug.security import generate_password_hash, check_password_hash
 from PIL import Image
-import streamlit as st
 from ultralytics import YOLO
 from collections import Counter
 
-MODEL_DIR = './miscellaneous/runs/detect/train/weights/best.pt'
- 
-def main():
-    global model
-    model = YOLO(MODEL_DIR)
+app = Flask(__name__)
+CORS(app, origins="*", supports_credentials=True)
+CONNECTION_STRING = "mongodb://localhost:27017/AIF"
+app.config["MONGO_URI"] = CONNECTION_STRING
+db = PyMongo(app).db
+
+MODEL_DIR = './best.pt'
+model = YOLO(MODEL_DIR)
+
+def serialize_document(doc):
+    if doc is not None:
+        doc['_id'] = str(doc['_id']) 
+    return doc
+
+@app.route('/', methods=['GET'])
+def home():
+    return "Server is running."
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.json
+    name = data.get('name')
+    mailid = data.get('mailid')
+    password = data.get('password')
+
+    if not name or not mailid or not password:
+        return jsonify({"message": "Please provide name, mailid, and password"}), 400
+
+    if db.users.find_one({"mailid": mailid}):
+        return jsonify({"message": "Mailid already exists"}), 400
+
+    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+    result = db.users.insert_one({
+        "name": name,
+        "mailid": mailid,
+        "password": hashed_password
+    })
+
+    user = db.users.find_one({"_id": result.inserted_id})
+    user = serialize_document(user) 
+
+    return jsonify({"message": "User registred", "user": user}), 200
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    mailid = data.get('mailid')
+    password = data.get('password')
+
+    if not mailid or not password:
+        return jsonify({"message": "Please provide mailid and password"}), 400
+
+    user = db.users.find_one({"mailid": mailid})
+
+    if not user or not check_password_hash(user['password'], password):
+        return jsonify({"message": "Invalid credentials"}), 401
+
+    user = serialize_document(user) 
+
+    return jsonify({"message": "User logged in", "user": user}), 200
+
+@app.route("/predict", methods=['POST'])
+def predict():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
     
-    st.title("Voice-Activated Deterrent System for Preventing Wild Animal Intrusion in Farmland")
-    st.write("This model is trained to detect and identify animals commonly found in farmland environments, such as Buffalo, Cattle, Deer, Dog, Fox, Pig, Sheep, and Wolf. These animals are specifically chosen due to their frequent presence in and around farmland areas.")
+    file = request.files['file']
 
-    uploaded_file = st.file_uploader("Upload an image or video", type=['jpg', 'jpeg', 'png', 'mp4'])
+    if not file:
+        return jsonify({'error': 'No file uploaded'}), 400
 
-    if uploaded_file:
-        if uploaded_file.type.startswith('image'):
-            inference_images(uploaded_file)
-        
-        if uploaded_file.type.startswith('video'):
-            inference_video(uploaded_file)
+    try:
+        image = Image.open(file)
+        results = model.predict(image)
 
-def inference_images(uploaded_file):
-    image = Image.open(uploaded_file)
-    predict = model.predict(image)
-    print("predict", predict)
+        detected_classes = []
+        detected_boxes = []
 
-    boxes = predict[0].boxes
-    print("boxes", boxes)
-    plotted = predict[0].plot()[:, :, ::-1]
+        for result in results:
+            if result.boxes is not None:
+                boxes = result.boxes
+                class_ids = [int(box.cls) for box in boxes]
+                class_names = {0: 'Buffalo', 1: 'Cattle', 2: 'Deer', 3: 'Dog', 4: 'Pig', 5: 'Fox', 6: 'Sheep', 7: 'Wolf'}
+                detected_classes.extend([class_names[class_id] for class_id in class_ids])
+                detected_boxes.extend(boxes.xyxy.tolist()) 
 
-    if len(boxes) == 0:
-        st.markdown("<h2 style='text-align: center;'>No Detection</h2>", unsafe_allow_html=True)
+        if not detected_classes:
+            return jsonify({'message': 0})
 
-    class_ids = [int(box.cls) for box in boxes]
-    class_names = {0: 'Buffalo', 1: 'Cattle', 2: 'Deer', 3: 'Dog', 4: 'Pig', 5: 'Fox', 6: 'Sheep', 7: 'Wolf'}
-    detected_classes = [class_names[class_id] for class_id in class_ids]
-    class_counts = Counter(detected_classes)
-    caption = ", ".join([f"{count} {cls}" for cls, count in class_counts.items()])
-    
-    st.image(plotted, caption=caption)
+        class_counts = Counter(detected_classes)
 
-def inference_video(uploaded_file):
-    temp_file = tempfile.NamedTemporaryFile(delete=False)
-    temp_file.write(uploaded_file.read())
-    temp_file.close()
+        return jsonify({
+            'message': 1,
+            'detected': class_counts,
+            'boxes': detected_boxes
+        })
 
-    cap = cv.VideoCapture(temp_file.name)
-    frame_count = 0
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-    if not cap.isOpened():
-        st.error("Error opening video file.")
-
-    frame_placeholder = st.empty()
-    stop_placeholder = st.button("Cancel")
-
-    while True:
-        ret, frame = cap.read()
-
-        if not ret:
-            break
-
-        frame_count += 1
-        
-        if frame_count % 2 == 0:
-            predict = model.predict(frame, conf=0.75)
-            plotted = predict[0].plot()
-            frame_placeholder.image(plotted, channels="BGR", caption="")
-        
-        if stop_placeholder:
-            os.unlink(temp_file.name)
-            break
-
-    cap.release()  
-    
-if __name__=='__main__':
-    main()
+if __name__ == '__main__':
+    app.run(debug = True)
