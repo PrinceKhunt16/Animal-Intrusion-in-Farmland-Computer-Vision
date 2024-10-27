@@ -31,17 +31,18 @@ const Sidebar = ({ ml, setMl }) => {
     }, [isOpen]);
 
     return (
-        <div className={`min-w-14 h-screen bg-gradient-to-b from-gray-800 to-gray-600/90 text-white fixed top-0 flex flex-col ${isOpen ? 'w-14' : 'w-64'} transition-all duration-300`}>
+        <div className={`min-w-14 h-screen bg-gradient-to-b from-gray-800 to-gray-600/90 text-white fixed top-0 flex flex-col ${isOpen ? 'w-14' : 'w-64'} transition-all duration-200`}>
             <div className="h-[70px] pl-4 pt-2 pr-4 pb-2 text-white flex items-center gap-3 relative">
                 <button onClick={toggleMenu} className="text-white">
                     <MdOutlineSegment className='w-[22px]' size={22} />
                 </button>
-                <h1
-                    className={`text-[33px] transition-all duration-300 transform absolute ${!isText ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-[-10px]'} ease-in-out`}
-                    style={{ visibility: !isText ? 'visible' : 'hidden', left: '50px' }}
-                >
-                    AIiF
-                </h1>
+                <div>
+                    <img
+                        src="assets/l2.png"
+                        alt="AIiF"
+                        className={`h-[33px] border border-white transition-all duration-100 transform ${!isText ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'} ease-in-out`}
+                    />
+                </div>
             </div>
             <ul className="list-none flex-1">
                 <li className={`h-[52px] flex items-center mb-2 px-4 ${isActive('/')}`}>
