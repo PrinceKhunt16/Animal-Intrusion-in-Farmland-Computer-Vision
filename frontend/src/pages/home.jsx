@@ -108,13 +108,14 @@ const Home = () => {
     formData.append('file', blob);
 
     try {
-      const response = await fetch('http://localhost:5000/predict', {
+      const response = await fetch('http://127.0.0.1:5000/predict', {
         method: 'POST',
-        body: formData,
+        body: formData
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
       const data = await response.json();

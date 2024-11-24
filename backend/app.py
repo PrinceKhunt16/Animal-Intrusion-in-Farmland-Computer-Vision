@@ -7,13 +7,12 @@ from ultralytics import YOLO
 from collections import Counter
 
 app = Flask(__name__)
-CORS(app, origins="*", supports_credentials=True)
 CONNECTION_STRING = "mongodb://localhost:27017/AIF"
 app.config["MONGO_URI"] = CONNECTION_STRING
 db = PyMongo(app).db
-
 MODEL_DIR = './best.pt'
 model = YOLO(MODEL_DIR)
+CORS(app)
 
 def serialize_document(doc):
     if doc is not None:
@@ -107,5 +106,6 @@ def predict():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 if __name__ == '__main__':
-    app.run(debug = True)
+    app.run(debug = True, port=5000)
